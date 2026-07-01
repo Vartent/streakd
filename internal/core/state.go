@@ -37,6 +37,9 @@ type Derived struct {
 	PendingFreezeSpend int
 	// FreezesAfterSpend is the inventory once pending misses are settled.
 	FreezesAfterSpend int
+	// FreezeProgress is the earn-progress once pending misses are settled
+	// (a pending break zeroes it, exactly as Settle would).
+	FreezeProgress int
 	// LossAt is the instant the streak breaks if no further activity happens
 	// (accounting for remaining freezes and rest days). Zero when Broken.
 	LossAt time.Time
@@ -56,6 +59,7 @@ func Derive(s State, cfg Config, now time.Time, loc *time.Location) Derived {
 	if s.LastEarned.IsZero() || s.CurrentCount == 0 {
 		d.Liveness = Broken
 		d.FreezesAfterSpend = s.Freezes
+		d.FreezeProgress = s.FreezeProgress
 		return d
 	}
 
@@ -66,11 +70,13 @@ func Derive(s State, cfg Config, now time.Time, loc *time.Location) Derived {
 		d.Liveness = Alive
 		d.Count = s.CurrentCount
 		d.FreezesAfterSpend = s.Freezes
+		d.FreezeProgress = s.FreezeProgress
 	case missed <= s.Freezes && cfg.Freezes.AutoConsume:
 		d.Liveness = Frozen
 		d.Count = s.CurrentCount
 		d.PendingFreezeSpend = missed
 		d.FreezesAfterSpend = s.Freezes - missed
+		d.FreezeProgress = s.FreezeProgress
 	default:
 		// The gap exceeds the inventory: auto-consume still burns every freeze
 		// covering the first misses before the chain snaps (matching Settle).
@@ -84,16 +90,21 @@ func Derive(s State, cfg Config, now time.Time, loc *time.Location) Derived {
 		return d
 	}
 
-	d.LossAt = lossAt(d, cfg, loc)
+	d.LossAt = lossAt(d, s.LastEarned, cfg, loc)
 	return d
 }
 
 // lossAt finds the boundary after which the streak cannot survive without
 // activity: the first unearned active period, advanced by the freezes that
-// will remain to cover further misses.
-func lossAt(d Derived, cfg Config, loc *time.Location) time.Time {
+// will remain to cover further misses. LastEarned can sit at or even after
+// the current period (a westward timezone change), in which case the first
+// at-risk period is the one following it.
+func lossAt(d Derived, lastEarned Date, cfg Config, loc *time.Location) time.Time {
 	p := d.CurrentPeriod
-	if d.EarnedThisPeriod || !cfg.scheduledOn(p) {
+	switch {
+	case !lastEarned.IsZero() && !lastEarned.Before(p):
+		p = NextScheduled(lastEarned, cfg)
+	case !cfg.scheduledOn(p):
 		p = NextScheduled(p, cfg)
 	}
 	spare := 0

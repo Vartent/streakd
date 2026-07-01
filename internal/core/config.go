@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Period is the cadence of a streak.
@@ -51,6 +52,10 @@ type Config struct {
 	Target     int          `json:"target,omitempty"`
 	Freezes    FreezePolicy `json:"freezes"`
 	Milestones []int        `json:"milestones,omitempty"`
+	// ReminderLocalTime enables the at-risk reminder event at this local wall
+	// time ("20:30"). Empty disables reminders for the streak. Core ignores
+	// it; the scheduler consumes it.
+	ReminderLocalTime string `json:"reminder_local_time,omitempty"`
 }
 
 // Normalized returns cfg with defaults filled in.
@@ -104,6 +109,11 @@ func (c Config) Validate() error {
 	}
 	if f.EarnEveryNPeriods > 0 && f.Max == 0 {
 		return errors.New("core: freeze earning enabled with freezes.max = 0")
+	}
+	if c.ReminderLocalTime != "" {
+		if _, err := time.Parse("15:04", c.ReminderLocalTime); err != nil {
+			return fmt.Errorf("core: reminder_local_time must be HH:MM, got %q", c.ReminderLocalTime)
+		}
 	}
 	prev := 0
 	for _, m := range c.Milestones {
