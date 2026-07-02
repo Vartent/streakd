@@ -79,7 +79,7 @@ func prevPeriod(p Date, cfg Config) Date {
 func Apply(s State, cfg Config, at time.Time, loc *time.Location) (State, []Event, bool) {
 	cfg = cfg.Normalized()
 	p := PeriodKey(at, loc, cfg)
-	if !cfg.scheduledOn(p) {
+	if !cfg.ScheduledOn(p) {
 		return s, nil, false
 	}
 	if !s.LastEarned.IsZero() && !s.LastEarned.Before(p) {

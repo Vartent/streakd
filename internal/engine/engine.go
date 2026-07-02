@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -54,6 +55,7 @@ type Engine struct {
 	defaultTZ string
 	types     map[string]core.Config
 	onEvent   func(Event)
+	logger    *slog.Logger
 }
 
 type Option func(*Engine)
@@ -76,6 +78,9 @@ func WithStreakType(key string, cfg core.Config) Option {
 // consumers should poll the outbox instead.
 func WithEventHandler(h func(Event)) Option { return func(e *Engine) { e.onEvent = h } }
 
+// WithLogger overrides the scheduler's logger (defaults to slog.Default()).
+func WithLogger(l *slog.Logger) Option { return func(e *Engine) { e.logger = l } }
+
 func New(pool *pgxpool.Pool, opts ...Option) (*Engine, error) {
 	e := &Engine{
 		pool:      pool,
@@ -83,6 +88,7 @@ func New(pool *pgxpool.Pool, opts ...Option) (*Engine, error) {
 		clock:     time.Now,
 		defaultTZ: "UTC",
 		types:     map[string]core.Config{},
+		logger:    slog.Default(),
 	}
 	for _, o := range opts {
 		o(e)

@@ -125,9 +125,9 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// scheduledOn reports whether date d is an active (non-rest) day. Week and
+// ScheduledOn reports whether date d is an active (non-rest) day. Week and
 // month periods have no rest days.
-func (c Config) scheduledOn(d Date) bool {
+func (c Config) ScheduledOn(d Date) bool {
 	if c.Period != PeriodDay || c.WeekdayMask == "" {
 		return true
 	}

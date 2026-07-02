@@ -58,7 +58,7 @@ func NextScheduled(p Date, cfg Config) Date {
 		return Date{t.Year(), t.Month(), t.Day()}
 	default:
 		for d := p.AddDays(1); ; d = d.AddDays(1) {
-			if cfg.scheduledOn(d) {
+			if cfg.ScheduledOn(d) {
 				return d
 			}
 		}

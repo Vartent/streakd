@@ -104,7 +104,7 @@ func lossAt(d Derived, lastEarned Date, cfg Config, loc *time.Location) time.Tim
 	switch {
 	case !lastEarned.IsZero() && !lastEarned.Before(p):
 		p = NextScheduled(lastEarned, cfg)
-	case !cfg.scheduledOn(p):
+	case !cfg.ScheduledOn(p):
 		p = NextScheduled(p, cfg)
 	}
 	spare := 0
