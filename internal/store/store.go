@@ -246,6 +246,44 @@ func DeleteMark(ctx context.Context, q Querier, streakID int64, period core.Date
 	return tag.RowsAffected() > 0, nil
 }
 
+// DeleteAllMarks wipes a streak's ledger (ReplaceHistory).
+func DeleteAllMarks(ctx context.Context, q Querier, streakID int64) error {
+	_, err := q.Exec(ctx, `DELETE FROM streaks.period_marks WHERE streak_id = $1`, streakID)
+	if err != nil {
+		return fmt.Errorf("store: delete all marks: %w", err)
+	}
+	return nil
+}
+
+// DeleteReminderClaims clears reminder dedup claims (history rewrites).
+func DeleteReminderClaims(ctx context.Context, q Querier, streakID int64) error {
+	_, err := q.Exec(ctx, `DELETE FROM streaks.reminder_claims WHERE streak_id = $1`, streakID)
+	if err != nil {
+		return fmt.Errorf("store: delete reminder claims: %w", err)
+	}
+	return nil
+}
+
+// ShiftMarks moves every ledger row `days` days into the past. Implemented
+// as delete-and-reinsert in one statement: an in-place UPDATE of the primary
+// key would transiently collide on consecutive dates (Postgres checks
+// uniqueness per row, not per statement).
+func ShiftMarks(ctx context.Context, q Querier, streakID int64, days int) error {
+	_, err := q.Exec(ctx, `
+		WITH moved AS (
+			DELETE FROM streaks.period_marks WHERE streak_id = $1 RETURNING *
+		)
+		INSERT INTO streaks.period_marks
+			(streak_id, local_period, amount, tz_at_record, first_recorded, last_recorded)
+		SELECT streak_id, local_period - $2::int, amount, tz_at_record, first_recorded, last_recorded
+		FROM moved
+	`, streakID, days)
+	if err != nil {
+		return fmt.Errorf("store: shift marks: %w", err)
+	}
+	return nil
+}
+
 // EarnedPeriods returns the ledger of periods whose amount crossed the
 // threshold, ascending — the Replay/Recount input.
 func EarnedPeriods(ctx context.Context, q Querier, streakID int64, minAmount int) ([]core.Date, error) {
