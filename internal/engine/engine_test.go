@@ -366,6 +366,37 @@ func TestRepairRestoresPreBreakCount(t *testing.T) {
 	}
 }
 
+// A reminder chosen before the user's first activity must not be lost: the
+// streak row is created on the spot and the reminder fires once a streak is
+// worth protecting.
+func TestSetReminderBeforeFirstActivity(t *testing.T) {
+	ctx := context.Background()
+	clock := newTestClock(time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC))
+	e := freshEngine(t, clock, WithStreakType("practice", kanjiLikeConfig()))
+
+	if err := e.SetReminder(ctx, "u1", "practice", "20:00"); err != nil {
+		t.Fatalf("set reminder before activity: %v", err)
+	}
+	if _, err := e.Record(ctx, RecordReq{Subject: "u1", Key: "practice"}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	// Next evening, unearned: the reminder must fire.
+	clock.Set(time.Date(2026, 5, 12, 20, 10, 0, 0, time.UTC))
+	if err := e.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	events, _ := e.PollEvents(ctx, 0, 100)
+	atRisk := 0
+	for _, ev := range events {
+		if ev.Type == core.EventAtRisk {
+			atRisk++
+		}
+	}
+	if atRisk != 1 {
+		t.Fatalf("at_risk = %d, want 1 (reminder set before first activity must survive)", atRisk)
+	}
+}
+
 func TestGetUnknownSubject(t *testing.T) {
 	clock := newTestClock(time.Date(2026, 5, 11, 10, 0, 0, 0, time.UTC))
 	e := freshEngine(t, clock, WithStreakType("practice", kanjiLikeConfig()))

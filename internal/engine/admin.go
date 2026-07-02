@@ -183,7 +183,9 @@ func latestBreak(ctx context.Context, q store.Querier, streakID int64) (int, tim
 }
 
 // SetReminder sets (or clears, with empty string) the local-time at-risk
-// reminder for one streak, e.g. "20:30".
+// reminder for one streak, e.g. "20:30". The subject and streak are created
+// if missing (registered streak types only), so a reminder chosen before the
+// first activity is not lost.
 func (e *Engine) SetReminder(ctx context.Context, subject, key, localTime string) error {
 	if localTime != "" {
 		if _, err := time.Parse("15:04", localTime); err != nil {
@@ -191,17 +193,21 @@ func (e *Engine) SetReminder(ctx context.Context, subject, key, localTime string
 		}
 	}
 	return e.inTx(ctx, func(tx pgx.Tx, emit func(Event)) error {
-		subj, err := store.GetSubject(ctx, tx, e.appID, subject)
+		subj, err := store.UpsertSubject(ctx, tx, e.appID, subject, e.defaultTZ)
 		if err != nil {
-			return translateNotFound(err)
+			return err
 		}
-		st, err := store.GetStreakLocked(ctx, tx, subj.ID, key)
+		cfg, err := e.configFor(key, nil)
 		if err != nil {
-			return translateNotFound(err)
+			return err
 		}
-		cfg := st.Config
-		cfg.ReminderLocalTime = localTime
-		return store.UpdateStreakConfig(ctx, tx, st.ID, cfg)
+		st, err := store.UpsertStreakLocked(ctx, tx, subj.ID, key, cfg)
+		if err != nil {
+			return err
+		}
+		newCfg := st.Config
+		newCfg.ReminderLocalTime = localTime
+		return store.UpdateStreakConfig(ctx, tx, st.ID, newCfg)
 	})
 }
 
